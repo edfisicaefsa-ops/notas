@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calificaciones - Escuela de Suboficiales</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen">
+
+  <!-- NAVBAR -->
+  <nav id="navbar" class="hidden bg-slate-900 text-white p-4 shadow-md flex justify-between items-center">
+    <div>
+      <h1 class="font-bold text-lg">Sistema de Calificaciones</h1>
+      <p id="user-info" class="text-xs text-slate-300"></p>
+    </div>
+    <button onclick="logout()" class="bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded text-sm font-medium">Salir</button>
+  </nav>
+
+  <!-- LOADER -->
+  <div id="loader" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-white p-5 rounded-lg shadow-lg flex items-center space-x-3">
+      <div class="w-6 h-6 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+      <span class="font-medium">Sincronizando con planilla...</span>
+    </div>
+  </div>
+
+  <!-- LOGIN VIEW -->
+  <div id="login-view" class="min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white p-8 rounded-xl shadow-lg max-w-sm w-full">
+      <div class="flex justify-center mb-4">
+        <img src="/icon-192.png" alt="Logo" class="w-16 h-16 rounded-xl shadow">
+      </div>
+      <h2 class="text-2xl font-bold text-center text-slate-800 mb-6">Ingreso al Sistema</h2>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Usuario</label>
+          <input type="text" id="login-user" class="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej: prof1 o admin">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Contraseña</label>
+          <input type="password" id="login-pass" class="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="••••••">
+        </div>
+        <button onclick="handleLogin()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition">Ingresar</button>
+        <p id="login-error" class="text-red-600 text-sm text-center hidden"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- TEACHER VIEW -->
+  <div id="teacher-view" class="hidden max-w-4xl mx-auto p-4 space-y-6">
+    <div class="bg-white p-5 rounded-xl shadow space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-semibold mb-1">Seleccionar Aula</label>
+          <select id="select-aula" onchange="loadStudents()" class="w-full border rounded-lg p-2.5 bg-slate-50"></select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">Seleccionar Aspirante</label>
+          <select id="select-alumno" onchange="selectStudent()" class="w-full border rounded-lg p-2.5 bg-slate-50">
+            <option value="">-- Seleccione un aspirante --</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div id="student-card" class="hidden bg-white p-5 rounded-xl shadow space-y-5">
+      <div class="flex flex-wrap justify-between items-center border-b pb-3 gap-2">
+        <div>
+          <h3 id="st-name" class="text-xl font-bold text-slate-800"></h3>
+          <p id="st-details" class="text-sm text-slate-500"></p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <span class="text-sm font-medium">Estado:</span>
+          <select id="st-status" onchange="changeStatus()" class="border rounded-lg px-3 py-1.5 font-semibold text-sm">
+            <option value="ALTA">ALTA</option>
+            <option value="BAJA">BAJA</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-3 text-center">
+        <div class="bg-slate-50 p-3 rounded-lg border">
+          <p class="text-xs text-slate-500 uppercase font-semibold">Prom. 1° Período</p>
+          <p id="st-prom1" class="text-lg font-bold text-blue-700 mt-1">-</p>
+        </div>
+        <div class="bg-slate-50 p-3 rounded-lg border">
+          <p class="text-xs text-slate-500 uppercase font-semibold">Prom. 2° Período</p>
+          <p id="st-prom2" class="text-lg font-bold text-blue-700 mt-1">-</p>
+        </div>
+        <div class="bg-blue-50 p-3 rounded-lg border border-blue-200">
+          <p class="text-xs text-blue-800 uppercase font-semibold">Promedio Anual</p>
+          <p id="st-prom-anual" class="text-lg font-bold text-blue-900 mt-1">-</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end pt-2">
+        <div>
+          <label class="block text-sm font-medium mb-1">Instancia Evaluativa</label>
+          <select id="grade-instance" class="w-full border rounded-lg p-2.5">
+            <option value="n1_p1">1° Nota - 1° Período</option>
+            <option value="n2_p1">2° Nota - 1° Período</option>
+            <option value="n1_p2">1° Nota - 2° Período</option>
+            <option value="n2_p2">2° Nota - 2° Período</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Calificación Numérica</label>
+          <input type="number" step="0.01" min="0" max="10" id="grade-value" class="w-full border rounded-lg p-2.5" placeholder="Ej: 8.50">
+        </div>
+        <button onclick="saveGrade()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg transition">
+          Cargar Calificación
+        </button>
+      </div>
+    </div>
+
+    <div class="bg-white p-5 rounded-xl shadow">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="font-bold text-lg">Planilla Completa del Aula</h3>
+        <button onclick="toggleFullTable()" class="text-sm text-blue-600 font-semibold underline">Mostrar / Ocultar Tabla</button>
+      </div>
+      <div id="full-table-container" class="hidden overflow-x-auto">
+        <table class="w-full text-sm text-left border-collapse">
+          <thead class="bg-slate-800 text-white">
+            <tr>
+              <th class="p-2">Legajo</th>
+              <th class="p-2">Apellido y Nombre</th>
+              <th class="p-2">Gén.</th>
+              <th class="p-2">Estado</th>
+              <th class="p-2">N1 P1</th>
+              <th class="p-2">N2 P1</th>
+              <th class="p-2">Prom P1</th>
+              <th class="p-2">N1 P2</th>
+              <th class="p-2">N2 P2</th>
+              <th class="p-2">Prom P2</th>
+              <th class="p-2">Anual</th>
+            </tr>
+          </thead>
+          <tbody id="full-table-body" class="divide-y"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN VIEW -->
+  <div id="admin-view" class="hidden max-w-5xl mx-auto p-4 space-y-6">
+    <div class="bg-white p-5 rounded-xl shadow space-y-4">
+      <h3 class="font-bold text-lg border-b pb-2">Dar de Alta Nuevo Aspirante</h3>
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+        <select id="admin-aula" class="border rounded-lg p-2">
+          <option value="101">Aula 101</option>
+          <option value="102">Aula 102</option>
+          <option value="103">Aula 103</option>
+        </select>
+        <input type="text" id="admin-legajo" placeholder="Legajo único" class="border rounded-lg p-2">
+        <input type="text" id="admin-apellido" placeholder="Apellido" class="border rounded-lg p-2">
+        <input type="text" id="admin-nombre" placeholder="Nombre" class="border rounded-lg p-2">
+        <select id="admin-genero" class="border rounded-lg p-2">
+          <option value="M">Masculino (M)</option>
+          <option value="F">Femenino (F)</option>
+        </select>
+      </div>
+      <button onclick="adminAddStudent()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium text-sm">
+        Agregar Aspirante al Final
+      </button>
+    </div>
+
+    <div class="bg-white p-5 rounded-xl shadow space-y-4">
+      <h3 class="font-bold text-lg border-b pb-2">Modificar Estado (Alta / Baja)</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <select id="admin-status-aula" onchange="adminLoadStatusStudents()" class="border rounded-lg p-2">
+          <option value="">-- Elegir Aula --</option>
+          <option value="101">Aula 101</option>
+          <option value="102">Aula 102</option>
+          <option value="103">Aula 103</option>
+        </select>
+        <select id="admin-status-alumno" class="border rounded-lg p-2">
+          <option value="">-- Elegir Aspirante --</option>
+        </select>
+        <div class="flex space-x-2">
+          <button onclick="adminChangeStatus('ALTA')" class="flex-1 bg-emerald-600 text-white py-2 rounded-lg text-sm font-semibold">Dar ALTA</button>
+          <button onclick="adminChangeStatus('BAJA')" class="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-semibold">Dar BAJA</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white p-5 rounded-xl shadow space-y-4">
+      <h3 class="font-bold text-lg border-b pb-2">Asignación de Aulas a Profesores</h3>
+      <div id="teachers-list" class="space-y-3"></div>
+    </div>
+
+    <div class="bg-white p-5 rounded-xl shadow space-y-4">
+      <div class="flex flex-wrap justify-between items-center border-b pb-2 gap-2">
+        <h3 class="font-bold text-lg">Reportes (Solo Aspirantes en ALTA)</h3>
+        <div class="space-x-2">
+          <button onclick="generateReports()" class="bg-slate-800 text-white px-3 py-1.5 rounded text-sm">Generar Vista Previa</button>
+          <button onclick="exportCSV()" class="bg-emerald-700 text-white px-3 py-1.5 rounded text-sm">Descargar CSV</button>
+          <button onclick="exportPDF()" class="bg-red-700 text-white px-3 py-1.5 rounded text-sm">Descargar PDF</button>
+        </div>
+      </div>
+      <div id="report-results" class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm"></div>
+    </div>
+  </div>
+
+<script>
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyH1GSMM9z69y3M5niuDJX3jhMFRH7s2RrAQ24bWFVSccpqxxgPLyhdHHMTXLY-fz00/exec";
+
+  let currentUser = null;
+  let currentStudents = [];
+  let lastReportData = { sinCalificacion: [], promedioMenorA4: [] };
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+  }
+
+  async function apiCall(payload) {
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+      const response = await fetch(SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      document.getElementById('loader').classList.add('hidden');
+      return data;
+    } catch (error) {
+      document.getElementById('loader').classList.add('hidden');
+      alert("Error de conexión con la hoja de cálculo.");
+      console.error(error);
+    }
+  }
+
+  async function handleLogin() {
+    const usuario = document.getElementById('login-user').value.trim();
+    const password = document.getElementById('login-pass').value.trim();
+    const errEl = document.getElementById('login-error');
+    
+    const res = await apiCall({ action: "login", usuario, password });
+    if (res && res.success) {
+      currentUser = res;
+      document.getElementById('login-view').classList.add('hidden');
+      document.getElementById('navbar').classList.remove('hidden');
+      document.getElementById('user-info').innerText = `Usuario: ${res.usuario} (${res.rol.toUpperCase()})`;
+
+      if (res.rol === 'admin') {
+        document.getElementById('admin-view').classList.remove('hidden');
+        loadTeachers();
+      } else {
+        document.getElementById('teacher-view').classList.remove('hidden');
+        const selAula = document.getElementById('select-aula');
+        selAula.innerHTML = res.aulas.map(a => `<option value="${a.trim()}">Aula ${a.trim()}</option>`).join('');
+        if (res.aulas.length > 0) loadStudents();
+      }
+    } else {
+      errEl.innerText = res ? res.message : "Error al iniciar sesión";
+      errEl.classList.remove('hidden');
+    }
+  }
+
+  function logout() {
+    location.reload();
+  }
+
+  async function loadStudents() {
+    const aula = document.getElementById('select-aula').value;
+    currentStudents = await apiCall({ action: "getClassroomData", aula });
+    
+    const selAlumno = document.getElementById('select-alumno');
+    selAlumno.innerHTML = '<option value="">-- Seleccione un aspirante --</option>' + 
+      currentStudents.map(s => `<option value="${s.legajo}">${s.apellido}, ${s.nombre} (Leg: ${s.legajo}) ${s.estado === 'BAJA' ? '[BAJA]' : ''}</option>`).join('');
+    
+    document.getElementById('student-card').classList.add('hidden');
+    renderFullTable();
+  }
+
+  function selectStudent() {
+    const legajo = document.getElementById('select-alumno').value;
+    const st = currentStudents.find(s => s.legajo == legajo);
+    if (!st) {
+      document.getElementById('student-card').classList.add('hidden');
+      return;
+    }
+
+    document.getElementById('student-card').classList.remove('hidden');
+    document.getElementById('st-name').innerText = `${st.apellido}, ${st.nombre}`;
+    document.getElementById('st-details').innerText = `Legajo: ${st.legajo} | Género: ${st.genero}`;
+    document.getElementById('st-status').value = st.estado;
+    
+    document.getElementById('st-prom1').innerText = typeof st.prom_p1 === 'number' ? st.prom_p1.toFixed(2) : st.prom_p1;
+    document.getElementById('st-prom2').innerText = typeof st.prom_p2 === 'number' ? st.prom_p2.toFixed(2) : st.prom_p2;
+    document.getElementById('st-prom-anual').innerText = typeof st.prom_anual === 'number' ? st.prom_anual.toFixed(2) : st.prom_anual;
+  }
+
+  async function saveGrade() {
+    const aula = document.getElementById('select-aula').value;
+    const legajo = document.getElementById('select-alumno').value;
+    const instance = document.getElementById('grade-instance').value;
+    const val = parseFloat(document.getElementById('grade-value').value);
+
+    if (isNaN(val)) return alert("Ingrese una calificación válida.");
+
+    const notas = {};
+    notas[instance] = val;
+
+    const res = await apiCall({ action: "updateGrades", aula, legajo, notas });
+    if (res && res.success) {
+      alert(res.message);
+      document.getElementById('grade-value').value = "";
+      await loadStudents();
+      document.getElementById('select-alumno').value = legajo;
+      selectStudent();
+    }
+  }
+
+  async function changeStatus() {
+    const aula = document.getElementById('select-aula').value;
+    const legajo = document.getElementById('select-alumno').value;
+    const nuevoEstado = document.getElementById('st-status').value;
+
+    const res = await apiCall({ action: "updateStudentStatus", aula, legajo, nuevoEstado });
+    if (res && res.success) {
+      alert(res.message);
+      await loadStudents();
+      document.getElementById('select-alumno').value = legajo;
+      selectStudent();
+    }
+  }
+
+  function toggleFullTable() {
+    document.getElementById('full-table-container').classList.toggle('hidden');
+  }
+
+  function renderFullTable() {
+    const tbody = document.getElementById('full-table-body');
+    tbody.innerHTML = currentStudents.map(s => `
+      <tr class="${s.estado === 'BAJA' ? 'bg-red-50 text-red-800' : 'bg-white'}">
+        <td class="p-2 font-medium">${s.legajo}</td>
+        <td class="p-2">${s.apellido}, ${s.nombre}</td>
+        <td class="p-2">${s.genero}</td>
+        <td class="p-2 font-bold">${s.estado}</td>
+        <td class="p-2">${s.n1_p1 !== "" ? s.n1_p1 : "-"}</td>
+        <td class="p-2">${s.n2_p1 !== "" ? s.n2_p1 : "-"}</td>
+        <td class="p-2 font-semibold">${typeof s.prom_p1 === 'number' ? s.prom_p1.toFixed(2) : s.prom_p1}</td>
+        <td class="p-2">${s.n1_p2 !== "" ? s.n1_p2 : "-"}</td>
+        <td class="p-2">${s.n2_p2 !== "" ? s.n2_p2 : "-"}</td>
+        <td class="p-2 font-semibold">${typeof s.prom_p2 === 'number' ? s.prom_p2.toFixed(2) : s.prom_p2}</td>
+        <td class="p-2 font-bold text-blue-800">${typeof s.prom_anual === 'number' ? s.prom_anual.toFixed(2) : s.prom_anual}</td>
+      </tr>
+    `).join('');
+  }
+
+  async function adminAddStudent() {
+    const aula = document.getElementById('admin-aula').value;
+    const legajo = document.getElementById('admin-legajo').value.trim();
+    const apellido = document.getElementById('admin-apellido').value.trim();
+    const nombre = document.getElementById('admin-nombre').value.trim();
+    const genero = document.getElementById('admin-genero').value;
+
+    if (!legajo || !apellido || !nombre) return alert("Complete todos los campos.");
+
+    const res = await apiCall({ action: "adminAddStudent", aula, legajo, apellido, nombre, genero });
+    alert(res.message);
+    if (res.success) {
+      document.getElementById('admin-legajo').value = "";
+      document.getElementById('admin-apellido').value = "";
+      document.getElementById('admin-nombre').value = "";
+    }
+  }
+
+  async function adminLoadStatusStudents() {
+    const aula = document.getElementById('admin-status-aula').value;
+    if (!aula) return;
+    const students = await apiCall({ action: "getClassroomData", aula });
+    const sel = document.getElementById('admin-status-alumno');
+    sel.innerHTML = students.map(s => `<option value="${s.legajo}">${s.apellido}, ${s.nombre} (${s.estado})</option>`).join('');
+  }
+
+  async function adminChangeStatus(nuevoEstado) {
+    const aula = document.getElementById('admin-status-aula').value;
+    const legajo = document.getElementById('admin-status-alumno').value;
+    if (!aula || !legajo) return alert("Seleccione aula y aspirante.");
+
+    const res = await apiCall({ action: "updateStudentStatus", aula, legajo, nuevoEstado });
+    alert(res.message);
+    adminLoadStatusStudents();
+  }
+
+  async function loadTeachers() {
+    const teachers = await apiCall({ action: "adminGetTeachers" });
+    const container = document.getElementById('teachers-list');
+    container.innerHTML = teachers.map(t => `
+      <div class="flex flex-wrap items-center justify-between bg-slate-50 p-3 rounded-lg border gap-2">
+        <span class="font-semibold">Profesor: ${t.usuario}</span>
+        <div class="flex items-center space-x-2">
+          <input type="text" id="aulas-${t.usuario}" value="${t.aulas}" placeholder="Ej: 101,102" class="border rounded p-1.5 text-sm">
+          <button onclick="saveTeacherAssignment('${t.usuario}')" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm">Guardar</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function saveTeacherAssignment(usuario) {
+    const nuevasAulas = document.getElementById(`aulas-${usuario}`).value.trim();
+    const res = await apiCall({ action: "adminUpdateAssignments", usuario, nuevasAulas });
+    alert(res.message);
+  }
+
+  async function generateReports() {
+    lastReportData = await apiCall({ action: "adminGenerateReport" });
+    const container = document.getElementById('report-results');
+    
+    const htmlSinNota = `
+      <div class="border rounded-lg p-3 bg-amber-50">
+        <h4 class="font-bold text-amber-900 mb-2">Sin Calificación (${lastReportData.sinCalificacion.length})</h4>
+        <ul class="list-disc pl-5 space-y-1">
+          ${lastReportData.sinCalificacion.map(i => `<li>Aula ${i.aula} - Leg. ${i.legajo}: ${i.apellido}, ${i.nombre}</li>`).join('') || '<li>Ninguno</li>'}
+        </ul>
+      </div>`;
+
+    const htmlPromBajo = `
+      <div class="border rounded-lg p-3 bg-red-50">
+        <h4 class="font-bold text-red-900 mb-2">Promedio Anual < 4 (${lastReportData.promedioMenorA4.length})</h4>
+        <ul class="list-disc pl-5 space-y-1">
+          ${lastReportData.promedioMenorA4.map(i => `<li>Aula ${i.aula} - Leg. ${i.legajo}: ${i.apellido}, ${i.nombre} (Prom: ${i.promedio.toFixed(2)})</li>`).join('') || '<li>Ninguno</li>'}
+        </ul>
+      </div>`;
+
+    container.innerHTML = htmlSinNota + htmlPromBajo;
+  }
+
+  function exportCSV() {
+    let csv = "Tipo Reporte,Aula,Legajo,Apellido,Nombre,Detalle\n";
+    lastReportData.sinCalificacion.forEach(r => {
+      csv += `Sin Calificacion,${r.aula},${r.legajo},"${r.apellido}","${r.nombre}",Falta nota\n`;
+    });
+    lastReportData.promedioMenorA4.forEach(r => {
+      csv += `Promedio Menor a 4,${r.aula},${r.legajo},"${r.apellido}","${r.nombre}",Promedio: ${r.promedio.toFixed(2)}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "reporte_aspirantes.csv";
+    link.click();
+  }
+
+  function exportPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    doc.text("Reporte Administrativo de Aspirantes (Estado: ALTA)", 14, 15);
+
+    const rows = [];
+    lastReportData.sinCalificacion.forEach(r => rows.push(["Sin Calificación", r.aula, r.legajo, `${r.apellido}, ${r.nombre}`, "Faltan notas"]));
+    lastReportData.promedioMenorA4.forEach(r => rows.push(["Promedio < 4", r.aula, r.legajo, `${r.apellido}, ${r.nombre}`, `Prom: ${r.promedio.toFixed(2)}`]));
+
+    doc.autoTable({
+      head: [['Motivo', 'Aula', 'Legajo', 'Aspirante', 'Detalle']],
+      body: rows,
+      startY: 22
+    });
+    doc.save("reporte_aspirantes.pdf");
+  }
+</script>
+</body>
+</html>
